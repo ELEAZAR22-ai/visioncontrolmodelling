@@ -1,4 +1,8 @@
-
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,14 +19,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Read raw request body as a Buffer
     const chunks = [];
     for await (const chunk of req) {
       chunks.push(chunk);
     }
     const rawBody = Buffer.concat(chunks);
 
-    // Forward the multipart/form-data request directly to Ultralytics
+    if (rawBody.length === 0) {
+      return res.status(400).json({ error: 'Empty image payload received by server.' });
+    }
+
     const response = await fetch(modelUrl, {
       method: 'POST',
       headers: {
@@ -32,7 +38,15 @@ export default async function handler(req, res) {
       body: rawBody,
     });
 
-    const data = await response.json();
+    const rawText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      return res.status(response.status || 502).json({
+        error: `Ultralytics returned non-JSON (${response.status}): ${rawText.slice(0, 140)}`,
+      });
+    }
 
     if (!response.ok) {
       return res.status(response.status).json({
